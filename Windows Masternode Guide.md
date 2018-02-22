@@ -24,7 +24,7 @@ It should look like following:
 	allowip=127.0.0.1
 	port=25117
 	masternode=1
-	masternodeaddr=YourIP:25117
+	masternodeaddr=YourIP:26667
 	masternodeprivkey=PRIVATEKEYREPLACETHIS
 
 8.Now save and close the config file.
