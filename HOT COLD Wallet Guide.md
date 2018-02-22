@@ -30,7 +30,7 @@
 	daemon=1<br />
 	server=1<br />
 	listen=1<br />
-	masternodeaddr=x.x.x.x:25117<br />
+	masternodeaddr=x.x.x.x:26667<br />
 	masternode=1<br /><br />
 	masternodeprivkey=privatekey<br />
 
