@@ -57,7 +57,7 @@ Now you can follow the same steps of single masternode guide
 	allowip=127.0.0.1
 	port=25117
 	masternode=1
-	masternodeaddr=YOUR-IP:25117
+	masternodeaddr=YOUR-IP:26667
 	masternodeprivkey=PRIVATEKEYREPLACETHIS
 
 8.Now save and close the config file.
