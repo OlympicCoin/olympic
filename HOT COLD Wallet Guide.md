@@ -20,8 +20,8 @@
 	git clone https://github.com/OlympicCoin/olympic<br />
 	cd ~/olympic/src<br />
 	make -f makefile.unix<br />
-	./Olympicd
-	./Olympicd stop
+	./Olympicd<br />
+	./Olympicd stop<br />
 	nano ~/.Olympic/Olympic.conf<br /><br />
 
 4. Config file should look like this:
