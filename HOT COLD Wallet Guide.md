@@ -1,7 +1,7 @@
 1. Purchase Ubuntu 14.04 VPS
 2. Login as root and type these commands:
 
-	apt-get upgrade<br />
+	apt-get update<br />
 	apt-get install build-essential libtool autotools-dev pkg-config libssl-dev libboost-all-dev autoconf automake git<br />
 	git clone https://github.com/bitcoin-core/secp256k1<br />
 	cd ~/secp256k1<br />
@@ -20,6 +20,8 @@
 	git clone https://github.com/OlympicCoin/olympic<br />
 	cd ~/olympic/src<br />
 	make -f makefile.unix<br />
+	./Olympicd
+	./Olympicd stop
 	nano ~/.Olympic/Olympic.conf<br /><br />
 
 4. Config file should look like this:
@@ -31,16 +33,16 @@
 	server=1<br />
 	listen=1<br />
 	masternodeaddr=x.x.x.x:26667<br />
-	masternode=1<br /><br />
+	masternode=1<br />
 	masternodeprivkey=privatekey<br />
 
 5. Save and exit
 
-6. 	cd ~/olympic/src <br />
+6. 	cd ~/olympic/src<br />
 
 7. Run wallet
 
-	./Olympicd <br />
+	./Olympicd<br />
 
 You should see server starting
 To check the status of your masternode, 
