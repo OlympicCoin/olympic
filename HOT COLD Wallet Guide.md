@@ -5,7 +5,7 @@
 - Click Debug Window
 - Click Console Tab
 - Type <code>masternode genkey</code>
-- Then copy the output for the masternodeprivkey=
+- Then save the output for the masternodeprivkey= in step 5
 
 ## 2. Purchase Ubuntu 14.04 VPS
 
@@ -23,12 +23,22 @@
 	make
 	./tests
 	
-		# Wait a few minutes for tests to finish<br />
+		# Wait a few minutes for tests to finish
 	
 	sudo make install  # optional
+	sudo apt-get install -y libqt4-dev libminiupnpc-dev
 	sudo apt-get install -y libgmp-dev openssl software-properties-common
 	sudo add-apt-repository ppa:bitcoin/bitcoin
+	sudo apt-get update
 	sudo apt-get install -y libdb4.8-dev libdb4.8++-dev
+		
+		# do the next 5 lines (recommended) if you don't have loads of RAM in your VPS
+	
+	sudo dd if=/dev/zero of=/var/swap.img bs=1024k count=1000
+	sudo mkswap /var/swap.img
+	sudo swapon /var/swap.img
+	sudo chmod 0600 /var/swap.img
+	sudo chown root:root /var/swap.img
 
 ## 4. Login as user and type these commands:
 
@@ -38,7 +48,7 @@
 	make -f makefile.unix
 	./Olympicd
 	
-		# Wait 5 seconds or so
+		# Ignore the error message
 	
 	./Olympicd stop
 	nano ~/.Olympic/Olympic.conf
@@ -75,15 +85,15 @@
 - Press "New Address" button
 - Type a name (like "MN1")
 - Press OK
-- click the new address to highlight it
-- click "Copy Address" and save it for Address in step 9 and 11
-- You can also repeat this step to create another address for rewards
+- Press the new address to highlight it
+- Press "Copy Address" and save it for Address in step 9 and 11
+- You can also repeat step 8 to create another address for rewards
 
 ## 9. Send exactly 1500 coins to LOCAL DESKTOP wallet
 
 - Press "Send" tab
 - In "Pay To", enter in the address from step 8
-- In "Amount", enter 1500
+- In "Amount", enter 1500 exactly. No more. No less.
 - Press "Send" and agree to the fee
 - You'll need a bit more than 1500 coins in your account to pay the fee
 
@@ -92,13 +102,14 @@
 - Press "Transactions" tab
 - Hover the mouse over the top line that says "Payment to yourself"
 - Wait for 15 confirmations
-- Click Help
-- Click Debug Window
-- Click Console Tab
+- Press "Help"
+- Press "Debug Window"
+- Press "Console Tab"
 - Type 
 <code>masternode outputs</code>
-- Copy the long hash alphanumber for step 11
-- Copy the index (normally 0 or 1) for step 11
+- You should now have a long alphanumber on the screen. If not, retry steps 8, 9, and 10.
+- Save the long hash alphanumber for step 11
+- Save the index (normally 0 or 1) for step 11
 
 ## 11. Create the Masternode in LOCAL DESKTOP wallet
 
@@ -108,17 +119,17 @@
 - Fill out the form to look like this:
 	+ Alias <code>MN1</code>
 	+ Address <code>24.56.235.22:26667</code> (your ip from step 2)
-	+ PrivKey (from step 1)
+	+ PrivKey (the genkey from step 1)
 	+ TxHash (the alphanumber from step 10)
 	+ Output Index (the 0 or 1 from step 10)
 	+ Reward Address (the address from step 8)
 	+ Reward % (100)
 - Press OK
 - Press "Update"
-- Click the line that shows the masternode information
-- Click Start
+- Press the line that shows the masternode information
+- Press Start
 - You should see masternode is running!
 
-- Type to check masternode status: 
+Type to check masternode status in the VPS terminal: 
 	<code>~./Olympicd masternode status</code>
 
