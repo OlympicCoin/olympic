@@ -18,14 +18,14 @@ Now wait for 1 confirmation of the transaction!!!
 
 It should look like following:
 
-	rpcuser=ANYTHINGHERE
-	rpcpassword=ANYTHINGHERE
+	rpcuser=<ANYTHINGHERE>
+	rpcpassword=<ANYTHINGHERE>
 	listen=1
 	allowip=127.0.0.1
-	port=25117
+	port=26667
 	masternode=1
-	masternodeaddr=YourIP:26667
-	masternodeprivkey=PRIVATEKEYREPLACETHIS
+	masternodeaddr=<YourIP>:26667
+	masternodeprivkey=<PRIVATEKEYREPLACETHIS>
 
 8.Now save and close the config file.
 
