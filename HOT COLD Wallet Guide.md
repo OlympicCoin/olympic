@@ -1,3 +1,5 @@
+## Works only on Ubuntu 14.04
+
 ## 1. Generate private key in the LOCAL DESKTOP wallet
 
 - Open the the Windows destop wallet
