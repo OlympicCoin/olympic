@@ -110,6 +110,28 @@ struct CMainSignals {
 } g_signals;
 }
 
+bool IsMNCollateralValid(int64_t value, int nHeight) {
+    if (nHeight < TIERED_MASTERNODES_START_BLOCK) {
+        return value == 1500*COIN;
+    } else {
+    // Using BOOST_FOREACH for concistency with the rest of the code, everything should be using a plain for from c++ 11 or 17
+    BOOST_FOREACH(PAIRTYPE(const int, int)& mntier, masternodeTiers)
+        {
+            if (value == (mntier.second)*COIN)
+            return true;
+        }
+    }
+    return false;
+}
+
+int64_t GetMNCollateral(int nHeight, int tier) {
+    if (nHeight < TIERED_MASTERNODES_START_BLOCK) {
+        return 1500;
+    } else {
+        return masternodeTiers[tier];
+    }
+}
+
 void RegisterWallet(CWalletInterface* pwalletIn) {
     g_signals.SyncTransaction.connect(boost::bind(&CWalletInterface::SyncTransaction, pwalletIn, _1, _2, _3));
     g_signals.EraseTransaction.connect(boost::bind(&CWalletInterface::EraseFromWallet, pwalletIn, _1));
@@ -1367,11 +1389,44 @@ int64_t GetProofOfWorkReward(int nHeight, int64_t nFees)
 
 }
 
+// Checks if a given reward present in a block is valid
+bool IsPOSRewardValid(int64_t value, int64_t nFees) {
+    int nHeight = pindexBest->nHeight+1;
+    if (nHeight < 20000) {
+        return value == (STATIC_POS_REWARD + nFees);
+    }
+    else {
+        if (nHeight < TIERED_MASTERNODES_START_BLOCK) {
+            return value == (STATIC_POS_REWARD + nFees);
+        }
+        else {
+            // Using BOOST_FOREACH for concistency with the rest of the code
+            BOOST_FOREACH(PAIRTYPE(const int, int)& tier, masternodeTierRewards)
+            {
+                if (value == (tier.second*COIN + POS_REWARD_TIERED_MN*COIN + nFees))
+                    return true;
+            }
+            // The case of a wallet staking with no mns up
+            if (value ==  POS_REWARD_TIERED_MN*COIN + nFees) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 // miner's coin stake reward
 int64_t GetProofOfStakeReward(const CBlockIndex* pindexPrev, int64_t nCoinAge, int64_t nFees)
 {
-    int64_t nSubsidy = STATIC_POS_REWARD;
-    return nSubsidy + nFees;
+    int64_t nSubsidy = 0 * COIN;
+    
+    if (pindexBest->nHeight+1 > 1 && pindexBest->nHeight+1 <= 20000) {
+        nSubsidy = STATIC_POS_REWARD;
+    }
+    else if (pindexBest->nHeight+1 > 20000 && pindexBest->nHeight+1 < TIERED_MASTERNODES_START_BLOCK)
+    {
+        nSubsidy = STATIC_POS_REWARD;
+    }    
+	return nSubsidy + nFees;
 }
 
 static int64_t nTargetTimespan = 25 * 60;  //25 mins
@@ -1958,10 +2013,11 @@ bool CBlock::ConnectBlock(CTxDB& txdb, CBlockIndex* pindex, bool fJustCheck)
         if (!vtx[1].GetCoinAge(txdb, pindex->pprev, nCoinAge))
             return error("ConnectBlock() : %s unable to get coin age for coinstake", vtx[1].GetHash().ToString());
 
-        int64_t nCalculatedStakeReward = GetProofOfStakeReward(pindex->pprev, nCoinAge, nFees);
+        
+        if (!IsPOSRewardValid(nStakeReward, nFees))
+            return DoS(100, error("ConnectBlock() : coinstake pays too much(actual=%d)", nStakeReward));
 
-        if (nStakeReward > nCalculatedStakeReward)
-            return DoS(100, error("ConnectBlock() : coinstake pays too much(actual=%d vs calculated=%d)", nStakeReward, nCalculatedStakeReward));
+        
     }
 
     // ppcoin: track money supply and mint amount info
@@ -2672,6 +2728,20 @@ bool CBlock::AcceptBlock()
         BOOST_FOREACH(CNode* pnode, vNodes)
             if (nBestHeight > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate))
                 pnode->PushInventory(CInv(MSG_BLOCK, hash));
+    }
+
+    // Record masternode payment
+    if (IsProofOfStake()) {
+        CScript payee;
+        for (int i = vtx[1].vout.size(); i--> 0; ) {
+            payee = vtx[1].vout[i].scriptPubKey;
+            break;
+        }
+        CTxDestination address1;
+        ExtractDestination(payee, address1);
+        COlympiccoinAddress address2(address1);
+
+        mnodeman.RecordMasternodePayment(payee, nTime, PROTOCOL_VERSION);
     }
 
     return true;

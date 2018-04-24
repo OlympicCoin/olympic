@@ -399,6 +399,85 @@ CMasternode *CMasternodeMan::Find(const CPubKey &pubKeyMasternode)
     return NULL;
 }
 
+int64_t CMasternodeMan::GetAverageRewardTime(int minProtocol) {
+    int64_t now = GetAdjustedTime();
+    int64_t total = 0;
+    int count = 0;
+    int64_t boundTime = 2*24*60*60; // 2 days expressed in seconds, used to detect trash values if any in nLastPaid
+    BOOST_FOREACH(CMasternode& mn, vMasternodes) {
+        mn.Check();
+        if(mn.protocolVersion < minProtocol || !mn.IsEnabled()) continue;
+
+        int64_t elapsed = 0;
+        if (now > mn.nLastPaid) {
+            elapsed = now - mn.nLastPaid;
+        }
+        else {
+            elapsed = 0;
+        }
+        if (elapsed > boundTime) {
+            elapsed = boundTime;
+        }
+        total+=elapsed;
+        count++;
+    }
+    if (count > 0) {
+        return total/count;
+    }
+    else {
+        return 1;
+    }
+}
+
+void CMasternodeMan::RecordMasternodePayment(CScript payee, int64_t nBlockTime, int minProtocol)
+{
+    CMasternode* targetMn = NULL;
+    // Search masternode
+    BOOST_FOREACH(CMasternode& mn, vMasternodes) {
+        mn.Check();
+        if(mn.protocolVersion < minProtocol || !mn.IsEnabled()) continue;
+
+        CScript mnpayee;
+        CScript mnrewardaddress = CScript();
+        int mnrewardpercent = 0;
+        mnpayee = GetScriptForDestination(mn.pubkey.GetID());
+        mnrewardaddress = mn.rewardAddress;
+        mnrewardpercent = mn.rewardPercentage;
+        if (mnrewardpercent != 0) {
+            if (mnrewardaddress == payee || mnpayee == payee) {
+                CTxDestination address1;
+                ExtractDestination(mnpayee, address1);
+                COlympiccoinAddress address2(address1);
+                if (targetMn != NULL) {
+                    if (targetMn->nLastPaid > mn.nLastPaid) {
+                        targetMn = &mn;
+                    }
+                }
+                else {
+                    targetMn = &mn;
+                }
+            }
+        }
+        else {
+            if (mnpayee == payee) {
+                CTxDestination address1;
+                ExtractDestination(mnpayee, address1);
+                COlympiccoinAddress address2(address1);
+                if (targetMn != NULL) {
+                    if (targetMn->nLastPaid > mn.nLastPaid) {
+                        targetMn = &mn;
+                    }
+                }
+                else {
+                    targetMn = &mn;
+                }
+            }
+        }
+    }
+    if (targetMn != NULL) {
+        targetMn->nLastPaid = nBlockTime;
+    }
+}
 CMasternode *CMasternodeMan::FindRandomNotInVec(std::vector<CTxIn> &vecToExclude, int protocolVersion)
 {
     LOCK(cs);
@@ -435,24 +514,51 @@ CMasternode* CMasternodeMan::GetCurrentMasterNode(int mod, int64_t nBlockHeight,
 {
     unsigned int score = 0;
     CMasternode* winner = NULL;
+    vector<CMasternode> mnRank;
 
-    // scan for winner
+    int64_t avgRewardTime = GetAverageRewardTime(minProtocol);
+    int64_t now = GetAdjustedTime();
+
+    // build rank vector
     BOOST_FOREACH(CMasternode& mn, vMasternodes) {
         mn.Check();
         if(mn.protocolVersion < minProtocol || !mn.IsEnabled()) continue;
 
         // calculate the score for each masternode
         uint256 n = mn.CalculateScore(mod, nBlockHeight);
+        mnRank.push_back(mn);
         unsigned int n2 = 0;
         memcpy(&n2, &n, sizeof(n2));
+        mn.score = n2;
 
-        // determine the winner
-        if(n2 > score){
-            score = n2;
-            winner = &mn;
-        }
+    }
+    if (mnRank.size() == 0) {
+        return NULL;
+    }
+    std::sort( mnRank.begin(), mnRank.end(), greater<CMasternode>() );
+
+    int cutoff = mnRank.size();
+    if (cutoff > 20) {
+        cutoff = 0.1 * cutoff;
     }
 
+    vector<CMasternode> winningArea(mnRank.begin(), mnRank.begin()+cutoff);
+    winner = &winningArea.front();
+    int64_t wLastPaid = winner->nLastPaid;
+
+    for(std::vector<CMasternode>::size_type i = 0; i != winningArea.size(); i++) {
+        if (now - winningArea[i].nLastPaid > avgRewardTime) {
+            if (winningArea[i].nLastPaid < wLastPaid) {
+                winner = &(winningArea[i]);
+                wLastPaid = winner->nLastPaid;
+            }
+        }
+    }
+    BOOST_FOREACH(CMasternode& mn, vMasternodes) {
+        if (mn.vin == winner->vin) {
+            return &mn;
+        }
+                }
     return winner;
 }
 
@@ -607,7 +713,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         int rewardPercentage = 0;
 
         // 70047 and greater
-        vRecv >> vin >> addr >> vchSig >> sigTime >> pubkey >> pubkey2 >> count >> current >> lastUpdated >> protocolVersion;
+		vRecv >> vin >> addr >> vchSig >> sigTime >> pubkey >> pubkey2 >> count >> current >> lastUpdated >> protocolVersion >> rewardAddress >> rewardPercentage;
 
         //Invalid nodes check
         if (sigTime < 1518608600) {
@@ -638,6 +744,10 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         std::string vchPubKey2(pubkey2.begin(), pubkey2.end());
 
         strMessage = addr.ToString() + boost::lexical_cast<std::string>(sigTime) + vchPubKey + vchPubKey2 + boost::lexical_cast<std::string>(protocolVersion);
+        if(rewardPercentage < 0 || rewardPercentage > 100){
+            LogPrintf("dsee - reward percentage out of range %d\n", rewardPercentage);
+            return;
+        }
 
         if(protocolVersion < MIN_POOL_PEER_PROTO_VERSION) {
             LogPrintf("dsee - ignoring outdated masternode %s protocol version %d\n", vin.ToString().c_str(), protocolVersion);
@@ -698,10 +808,12 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
                     pmn->sig = vchSig;
                     pmn->protocolVersion = protocolVersion;
                     pmn->addr = addr;
+					pmn->rewardAddress = rewardAddress;
+                    pmn->rewardPercentage = rewardPercentage;    
                     pmn->Check();
-                    pmn->isOldNode = true;
+//                    pmn->isOldNode = true;
                     if(pmn->IsEnabled())
-                        mnodeman.RelayOldMasternodeEntry(vin, addr, vchSig, sigTime, pubkey, pubkey2, count, current, lastUpdated, protocolVersion);
+						mnodeman.RelayMasternodeEntry(vin, addr, vchSig, sigTime, pubkey, pubkey2, count, current, lastUpdated, protocolVersion, rewardAddress, rewardPercentage);
                 }
             }
 
@@ -722,16 +834,54 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         //  - this is checked later by .check() in many places and by ThreadCheckDarkSendPool()
 
         CValidationState state;
-        CTransaction tx = CTransaction();
-        CTxOut vout = CTxOut((GetMNCollateral(pindexBest->nHeight)-1)*COIN, darkSendPool.collateralPubKey);
-        tx.vin.push_back(vin);
-        tx.vout.push_back(vout);
         bool fAcceptable = false;
-        {
-            TRY_LOCK(cs_main, lockMain);
-            if(!lockMain) return;
-            fAcceptable = AcceptableInputs(mempool, tx, false, NULL);
+
+        uint256 hashBlock = 0;
+        CTransaction tx = CTransaction();
+        GetTransaction(vin.prevout.hash, tx, hashBlock);
+        int64_t checkValue = tx.vout[vin.prevout.n].nValue;
+        int newMNTier = 0;
+        if (pmn==NULL || pmn->tier >= 0) {
+            BOOST_FOREACH(PAIRTYPE(const int, int) & mntier, masternodeTiers)
+            {
+                if (!fAcceptable && (mntier.second*COIN) == checkValue) {
+                    CTransaction tx = CTransaction();
+                    CTxOut vout = CTxOut((GetMNCollateral(pindexBest->nHeight, mntier.first)) * COIN,
+                                         darkSendPool.collateralPubKey);
+                    tx.vin.push_back(vin);
+                    tx.vout.push_back(vout);
+                    {
+                        TRY_LOCK(cs_main, lockMain);
+                        if (!lockMain) return;
+                        fAcceptable = AcceptableInputs(mempool, tx, false, NULL);
+                        if (fAcceptable) { // Update mn tier on our records
+                            if (pmn != NULL) {
+                                pmn->UpdateTier(mntier.first);
+                            }
+                            else {
+                                newMNTier = mntier.first;
+                            }
+                        }
+                        else {
+                            tx.vin.pop_back();
+                            tx.vout.pop_back();
+                        }
+                    }
+                }
+            }
         }
+        else {
+            CTxOut vout = CTxOut((GetMNCollateral(pindexBest->nHeight, pmn->tier)) * COIN,
+                                 darkSendPool.collateralPubKey);
+            tx.vin.push_back(vin);
+            tx.vout.push_back(vout);
+            {
+                TRY_LOCK(cs_main, lockMain);
+                if (!lockMain) return;
+                fAcceptable = AcceptableInputs(mempool, tx, false, NULL);
+            }
+        }
+
         if(fAcceptable){
             LogPrint("masternode", "dsee - Accepted masternode entry %i %i\n", count, current);
 
@@ -758,17 +908,26 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
                 }
             }
 
+			//doesn't support multisig addresses
+            if(rewardAddress.IsPayToScriptHash()){
+                rewardAddress = CScript();
+                rewardPercentage = 0;
+            }
             // add our masternode
             CMasternode mn(addr, vin, pubkey, vchSig, sigTime, pubkey2, protocolVersion, rewardAddress, rewardPercentage);
             mn.UpdateLastSeen(lastUpdated);
 
+// Update tier on new entries just after creation
+            if (newMNTier != 0) {
+                mn.UpdateTier(newMNTier);
+            }
             if (!CheckNode((CAddress)addr)){
                 mn.ChangePortStatus(false);
             } else {
                 addrman.Add(CAddress(addr), pfrom->addr, 2*60*60); // use this as a peer
             }
 
-            mn.ChangeNodeStatus(true);
+            //mn.ChangeNodeStatus(true);
             this->Add(mn);
 
             // if it matches our masternodeprivkey, then we've been remotely activated
@@ -777,7 +936,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
                 }
 
             if(count == -1 && !isLocal)
-                mnodeman.RelayOldMasternodeEntry(vin, addr, vchSig, sigTime, pubkey, pubkey2, count, current, lastUpdated, protocolVersion);
+                mnodeman.RelayMasternodeEntry(vin, addr, vchSig, sigTime, pubkey, pubkey2, count, current, lastUpdated, protocolVersion, rewardAddress, rewardPercentage);
 
         } else {
             LogPrintf("dsee - Rejected masternode entry %s\n", addr.ToString().c_str());
@@ -792,7 +951,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
             }
         }
     }
-
+/*
     else if (strCommand == "dsee+") { //DarkSend Election Entry+
 
         CTxIn vin;
@@ -1009,7 +1168,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
             }
         }
     }
-
+*/
     else if (strCommand == "dseep") { //DarkSend Election Entry Ping
 
         CTxIn vin;
@@ -1151,17 +1310,11 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
             {
                 LogPrint("masternode", "dseg - Sending masternode entry - %s \n", mn.addr.ToString().c_str());
                 if(vin == CTxIn()){
-                    if (mn.isOldNode){
-                        pfrom->PushMessage("dsee", mn.vin, mn.addr, mn.sig, mn.sigTime, mn.pubkey, mn.pubkey2, count, i, mn.lastTimeSeen, mn.protocolVersion);
-                    } else {
-                        pfrom->PushMessage("dsee+", mn.vin, mn.addr, mn.sig, mn.sigTime, mn.pubkey, mn.pubkey2, count, i, mn.lastTimeSeen, mn.protocolVersion, mn.rewardAddress, mn.rewardPercentage);
-                    }
+                    
+					pfrom->PushMessage("dsee", mn.vin, mn.addr, mn.sig, mn.sigTime, mn.pubkey, mn.pubkey2, count, i, mn.lastTimeSeen, mn.protocolVersion, mn.rewardAddress, mn.rewardPercentage);
                 } else if (vin == mn.vin) {
-                    if (mn.isOldNode){
-                        pfrom->PushMessage("dsee", mn.vin, mn.addr, mn.sig, mn.sigTime, mn.pubkey, mn.pubkey2, count, i, mn.lastTimeSeen, mn.protocolVersion);
-                    } else {
-                        pfrom->PushMessage("dsee+", mn.vin, mn.addr, mn.sig, mn.sigTime, mn.pubkey, mn.pubkey2, count, i, mn.lastTimeSeen, mn.protocolVersion, mn.rewardAddress, mn.rewardPercentage);
-                    }
+                   
+					pfrom->PushMessage("dsee", mn.vin, mn.addr, mn.sig, mn.sigTime, mn.pubkey, mn.pubkey2, count, i, mn.lastTimeSeen, mn.protocolVersion, mn.rewardAddress, mn.rewardPercentage);
                     LogPrintf("dseg - Sent 1 masternode entries to %s\n", pfrom->addr.ToString().c_str());
                     return;
                 }
@@ -1173,7 +1326,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
     }
 
 }
-
+/*
 void CMasternodeMan::RelayOldMasternodeEntry(const CTxIn vin, const CService addr, const std::vector<unsigned char> vchSig, const int64_t nNow, const CPubKey pubkey, const CPubKey pubkey2, const int count, const int current, const int64_t lastUpdated, const int protocolVersion)
 {
     LOCK(cs_vNodes);
@@ -1181,12 +1334,12 @@ void CMasternodeMan::RelayOldMasternodeEntry(const CTxIn vin, const CService add
         pnode->PushMessage("dsee", vin, addr, vchSig, nNow, pubkey, pubkey2, count, current, lastUpdated, protocolVersion);
     }
 }
-
+*/
 void CMasternodeMan::RelayMasternodeEntry(const CTxIn vin, const CService addr, const std::vector<unsigned char> vchSig, const int64_t nNow, const CPubKey pubkey, const CPubKey pubkey2, const int count, const int current, const int64_t lastUpdated, const int protocolVersion, CScript rewardAddress, int rewardPercentage)
 {
     LOCK(cs_vNodes);
     BOOST_FOREACH(CNode* pnode, vNodes){
-        pnode->PushMessage("dsee+", vin, addr, vchSig, nNow, pubkey, pubkey2, count, current, lastUpdated, protocolVersion, rewardAddress, rewardPercentage);
+        pnode->PushMessage("dsee", vin, addr, vchSig, nNow, pubkey, pubkey2, count, current, lastUpdated, protocolVersion, rewardAddress, rewardPercentage);
     }
 }
 
@@ -1207,8 +1360,7 @@ void CMasternodeMan::Remove(CTxIn vin)
             LogPrint("masternode", "CMasternodeMan: Removing Masternode %s - %i now\n", (*it).addr.ToString().c_str(), size() - 1);
             vMasternodes.erase(it);
             break;
-        } else {
-            ++it;
+
         }
     }
 }

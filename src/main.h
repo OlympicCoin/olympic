@@ -73,7 +73,8 @@ inline int64_t FutureDrift(int64_t nTime) { return nTime + DRIFT; }
 /** "reject" message codes **/
 static const unsigned char REJECT_INVALID = 0x10;
 
-inline int64_t GetMNCollateral(int nHeight) { return 1500; }
+int64_t GetMNCollateral(int nHeight, int tier);
+bool IsPOSRewardValid(int64_t value, int64_t nFees);
 
 extern CScript COINBASE_FLAGS;
 extern CCriticalSection cs_main;
@@ -117,6 +118,8 @@ class CTxIndex;
 class CWalletInterface;
 struct CNodeStateStats;
 
+/** Check a given amount to see if it matches any of the masternode tiers */
+bool IsMNCollateralValid(int64_t, int nHeight);
 /** Register a wallet to receive updates from core */
 void RegisterWallet(CWalletInterface* pwalletIn);
 /** Unregister a wallet from core */

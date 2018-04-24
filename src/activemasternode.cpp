@@ -301,7 +301,7 @@ bool CActiveMasternode::Register(CTxIn vin, CService service, CKey keyCollateral
     {
         LogPrintf("CActiveMasternode::Register() - Adding to masternode list service: %s - vin: %s\n", service.ToString().c_str(), vin.ToString().c_str());
         CMasternode mn(service, vin, pubKeyCollateralAddress, vchMasterNodeSignature, masterNodeSignatureTime, pubKeyMasternode, PROTOCOL_VERSION, rewardAddress, rewardPercentage); 
-        mn.ChangeNodeStatus(false);
+        //mn.ChangeNodeStatus(false);
         mn.UpdateLastSeen(masterNodeSignatureTime);
         mnodeman.Add(mn);
     }
@@ -439,7 +439,7 @@ vector<COutput> CActiveMasternode::SelectCoinsMasternode()
     // Filter
     BOOST_FOREACH(const COutput& out, vCoins)
     {
-        if(out.tx->vout[out.i].nValue == GetMNCollateral(pindexBest->nHeight)*COIN) { //exactly
+        if (IsMNCollateralValid(out.tx->vout[out.i].nValue, pindexBest->nHeight)) {
         	filteredCoins.push_back(out);
         }
     }
@@ -461,7 +461,7 @@ vector<COutput> CActiveMasternode::SelectCoinsMasternodeForPubKey(std::string co
     // Filter
     BOOST_FOREACH(const COutput& out, vCoins)
     {
-        if(out.tx->vout[out.i].scriptPubKey == scriptPubKey && out.tx->vout[out.i].nValue == GetMNCollateral(pindexBest->nHeight)*COIN) { //exactly
+        if(out.tx->vout[out.i].scriptPubKey == scriptPubKey && IsMNCollateralValid(out.tx->vout[out.i].nValue, pindexBest->nHeight)) { //exactly
         	filteredCoins.push_back(out);
         }
     }
@@ -474,6 +474,7 @@ bool CActiveMasternode::EnableHotColdMasterNode(CTxIn& newVin, CService& newServ
     if(!fMasterNode) return false;
 
     status = MASTERNODE_REMOTELY_ENABLED;
+    notCapableReason = "Successfully started masternode.";
 
     //The values below are needed for signing dseep messages going forward
     this->vin = newVin;

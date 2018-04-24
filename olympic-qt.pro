@@ -126,10 +126,10 @@ LIBS += $$PWD/src/secp256k1/src/libsecp256k1_la-secp256k1.o
     QMAKE_CLEAN += $$PWD/src/secp256k1/src/libsecp256k1_la-secp256k1.o; cd $$PWD/src/secp256k1; $(MAKE) clean
 } else {
     isEmpty(SECP256K1_LIB_PATH) {
-        win32:SECP256K1_LIB_PATH=c:/dev/coindeps32/secp256k1/lib
+        win32:SECP256K1_LIB_PATH=c:/olympic/src/secp256k1/.libs
     }
     isEmpty(SECP256K1_INCLUDE_PATH) {
-        win32:SECP256K1_INCLUDE_PATH=c:/dev/coindeps32/secp256k1/include
+        win32:SECP256K1_INCLUDE_PATH=c:/olympic/src/secp256k1/include
     }
 }
 
