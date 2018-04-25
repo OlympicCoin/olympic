@@ -93,7 +93,7 @@ public:
     int nLastScanningErrorBlockHeight;
     int64_t nLastPaid;
     bool isPortOpen;
-    //bool isOldNode;
+    bool isOldNode;
 	int tier;
     unsigned int score;
 
@@ -132,9 +132,9 @@ public:
         swap(first.nLastScanningErrorBlockHeight, second.nLastScanningErrorBlockHeight);
         swap(first.nLastPaid, second.nLastPaid);
         swap(first.isPortOpen, second.isPortOpen);
-		swap(first.tier, second.tier);
+swap(first.tier, second.tier);
         swap(first.score, second.score);
-        //swap(first.isOldNode, second.isOldNode);
+        swap(first.isOldNode, second.isOldNode);
     }
 
     CMasternode& operator=(CMasternode from)
@@ -149,7 +149,7 @@ public:
     friend bool operator!=(const CMasternode& a, const CMasternode& b)
     {
         return !(a.vin == b.vin);
-    }
+	}
     friend bool operator<(const CMasternode& a, const CMasternode&b)
     {
         return a.score < b.score;
@@ -193,14 +193,14 @@ public:
                 READWRITE(nLastScanningErrorBlockHeight);
                 READWRITE(nLastPaid);
                 READWRITE(isPortOpen);
-                //READWRITE(isOldNode);
+                READWRITE(isOldNode);
         }
     )
 
     int64_t SecondsSincePayment()
     {
         return (GetAdjustedTime() - nLastPaid);
-    }
+	}
 
     void UpdateTier(int newTier) {
         tier = newTier;
@@ -219,12 +219,12 @@ public:
     {
         isPortOpen = status;
     }
-	/*
+
     void ChangeNodeStatus(bool status)
     {
         isOldNode = status;
     }
-    */
+    
     inline uint64_t SliceHash(uint256& hash, int slice)
     {
         uint64_t n = 0;
