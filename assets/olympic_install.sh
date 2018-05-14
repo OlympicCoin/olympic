@@ -21,7 +21,6 @@ function compile_node() {
   echo -e "Prepare to download $COIN_NAME"
   cd $TMP_FOLDER
   wget -q $COIN_REPO
-  mv Olympicd-ubuntu16 Olympicd
   chmod +x Olympicd
   cp Olympicd /usr/local/bin
   cd -
